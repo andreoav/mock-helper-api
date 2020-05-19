@@ -2,43 +2,75 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
 	"github.com/gofiber/fiber"
+	// "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
 	_projectHttp "github.com/andreoav/mock-helper-api/pkg/project/adapter/http"
 	_projectRepo "github.com/andreoav/mock-helper-api/pkg/project/repository/mongo"
 	_projectService "github.com/andreoav/mock-helper-api/pkg/project/service"
+
+	_mockHttp "github.com/andreoav/mock-helper-api/pkg/mock/adapter/http"
+	_mockService "github.com/andreoav/mock-helper-api/pkg/mock/service"
 )
 
-type Config struct{}
-
-type Application struct {
-	config *Config
+// DatabaseConfig config options
+type DatabaseConfig struct {
+	URI  string
+	Name string
 }
 
-func NewApplication(config *Config) *Application {
+// Config struct
+type Config struct {
+	Database DatabaseConfig
+}
+
+// Application struct
+type Application struct {
+	config Config
+}
+
+// NewApplication receives the config
+// and returns a pointer to an application
+func NewApplication(config Config) *Application {
 	return &Application{config}
 }
 
+// Start the http server
 func (a *Application) Start() {
 	app := fiber.New()
+	// logger := logrus.New()
 
-	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://admin:admin@localhost:27017"))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(a.config.Database.URI))
 
 	if err != nil {
-		panic("Application was not able to start")
+		log.Fatal(err)
 	}
 
-	database := client.Database("mock-server")
+	defer func() {
+		if err = client.Disconnect(context.TODO()); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	defer cancel()
+
+	database := client.Database(a.config.Database.Name)
 
 	projectRepo := _projectRepo.NewProjectRepository(database)
 	projectService := _projectService.NewProjectService(projectRepo)
 	_projectHttp.NewFiberProjectHandler(app, projectService)
 
-	log.Fatal(app.Listen(9000))
+	mockService := _mockService.NewMockService(projectRepo)
+	_mockHttp.NewFiberMockHandler(app, mockService)
+
+	if err := app.Listen(9000); err != nil {
+		fmt.Println("Shutting down server")
+	}
 }

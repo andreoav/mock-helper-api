@@ -12,6 +12,7 @@ type Project struct {
 
 // ProjectRepository interface
 type ProjectRepository interface {
+	GetByID(ctx context.Context, id string) (Project, error)
 	GetByBasePath(ctx context.Context, basePath string) (Project, error)
 }
 
