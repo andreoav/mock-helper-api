@@ -27,13 +27,16 @@ func NewProjectRepository(db *mongo.Database) domain.ProjectRepository {
 func (pr ProjectRepository) GetByID(ctx context.Context, id string) (domain.Project, error) {
 	var project domain.Project
 
-	objectID, err := primitive.ObjectIDFromHex(id)
+	objectID, _ := primitive.ObjectIDFromHex(id)
 
-	if err != nil {
-		return project, errors.New("invalid ObjectID")
+	filter := bson.M{
+		"_id":              objectID,
+		"endpoints.method": "GET",
 	}
 
-	if err := pr.DB.Collection("projects").FindOne(ctx, bson.M{"_id": objectID}).Decode(&project); err != nil {
+	err := pr.DB.Collection("projects").FindOne(ctx, filter).Decode(&project)
+
+	if err != nil || err != mongo.ErrNoDocuments {
 		return project, errors.Wrap(err, "GetByID failed")
 	}
 
@@ -44,7 +47,9 @@ func (pr ProjectRepository) GetByID(ctx context.Context, id string) (domain.Proj
 func (pr ProjectRepository) GetByBasePath(ctx context.Context, basePath string) (domain.Project, error) {
 	var project domain.Project
 
-	if err := pr.DB.Collection("projects").FindOne(ctx, bson.M{"basePath": basePath}).Decode(&project); err != nil {
+	err := pr.DB.Collection("projects").FindOne(ctx, bson.M{"basePath": basePath}).Decode(&project)
+
+	if err != nil || err != mongo.ErrNoDocuments {
 		return project, errors.Wrap(err, "getByBasePath failed")
 	}
 
